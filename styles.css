@@ -29,7 +29,7 @@ body {
 }
 button, input, select { font: inherit; color: inherit; }
 code { font-family: var(--font); background: var(--accent-2); color: #cfdcff; padding: 0 4px; }
-img { display: block; max-width: 100%; }
+img { display: block; max-width: 100%; height: auto; }
 [hidden] { display: none !important; }
 
 /* Top bar ---------------------------------------------------------------------- */
@@ -84,7 +84,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, label.btn:focus
 .lede { color: var(--muted); max-width: 46ch; margin: 0 0 30px; font-size: 14px; }
 .fineprint { color: var(--faint); font-size: 11px; margin-top: 22px; max-width: 56ch; }
 .hero-art { position: relative; display: grid; place-items: center; }
-.hero-art img { width: min(760px, 100%); position: relative; filter: drop-shadow(0 40px 60px rgb(0 0 0 / 0.7)); animation: float 6s ease-in-out infinite; }
+.hero-art img { width: min(760px, 100%); height: auto; aspect-ratio: 1; object-fit: contain; position: relative; filter: drop-shadow(0 40px 60px rgb(0 0 0 / 0.7)); animation: float 6s ease-in-out infinite; }
 .glow { position: absolute; inset: 12% 10%; background: radial-gradient(closest-side, rgb(47 107 255 / 0.35), transparent 70%); filter: blur(30px); }
 @keyframes float { 50% { transform: translateY(-12px); } }
 .turntable {
