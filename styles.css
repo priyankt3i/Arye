@@ -345,3 +345,6 @@ dialog menu { display: flex; gap: 10px; justify-content: flex-end; padding: 0; m
   .macro-events li { grid-template-columns: 22px 18px 1fr 80px 22px; }
   .readout b { font-size: 20px; }
 }
+
+.foot a { color: var(--muted); }
+.foot a:hover { color: var(--text); }

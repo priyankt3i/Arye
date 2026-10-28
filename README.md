@@ -53,3 +53,11 @@ js/app.js         UI
 js/demo-flash.js  real flash dump used by ?demo
 PROTOCOL.md       reverse-engineered protocol reference
 ```
+
+## License
+
+The code and documentation are released under the [MIT License](LICENSE), © 2026 kumar priyank.
+
+The RCC-1 product renders in `assets/` are © ARYE Equipment Ltd and are **not** MIT-licensed; see [assets/ATTRIBUTION.md](assets/ATTRIBUTION.md).
+Get ARYE's permission, or swap in your own images, before publishing this project.
+"ARYE" and "RCC-1" are names used by ARYE Equipment Ltd. This is an unofficial community tool that ARYE has not endorsed.
