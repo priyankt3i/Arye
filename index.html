@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RCC-1 Web Configurator</title>
+  <meta name="description" content="Unofficial browser-based configurator for the RCC-1 mouse. Works on Linux, macOS, Windows and ChromeOS via WebHID.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="assets/rcc1-top.png">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">RCC-1</span>
+      <span class="brand-sub">WEB CONFIGURATOR</span>
+    </div>
+    <div class="status" id="status" hidden>
+      <span class="pill" id="st-conn"><i class="dot"></i><span id="st-name">—</span></span>
+      <span class="pill muted" id="st-ver">—</span>
+      <span class="pill battery" id="st-battery" title="Battery"><span class="cells"></span><span class="pct">—</span></span>
+      <button class="link" id="disconnect">DISCONNECT</button>
+    </div>
+  </header>
+
+  <!-- Landing ------------------------------------------------------------- -->
+  <section id="landing">
+    <div class="hero">
+      <div class="hero-copy">
+        <p class="kicker">RCC-1 · 8K WIRELESS · PAW3950</p>
+        <h1 class="display">FINE TUNE<br>EVERYTHING.<br><span class="dim">NO INSTALL.</span></h1>
+        <p class="lede">DPI, polling rate, buttons, macros, sensor and receiver options, in your browser on Linux, macOS, Windows and ChromeOS.</p>
+        <div class="actions">
+          <button class="btn btn-primary" id="connect">CONNECT DEVICE <span aria-hidden="true">→</span></button>
+          <button class="btn" id="demo">TRY DEMO <span aria-hidden="true">→</span></button>
+        </div>
+        <p class="fineprint" id="support-note"></p>
+      </div>
+      <div class="hero-art">
+        <div class="glow"></div>
+        <img src="assets/rcc1-hero.png" alt="RCC-1 mouse" width="1400" height="1400">
+      </div>
+    </div>
+    <div class="turntable" aria-hidden="true">
+      <figure><img src="assets/rcc1-top.png" alt="" loading="lazy"><figcaption>TOP</figcaption></figure>
+      <figure><img src="assets/rcc1-left.png" alt="" loading="lazy"><figcaption>LEFT</figcaption></figure>
+      <figure><img src="assets/rcc1-front.png" alt="" loading="lazy"><figcaption>FRONT</figcaption></figure>
+      <figure><img src="assets/rcc1-right.png" alt="" loading="lazy"><figcaption>RIGHT</figcaption></figure>
+      <figure><img src="assets/rcc1-bottom.png" alt="" loading="lazy"><figcaption>BOTTOM</figcaption></figure>
+    </div>
+    <div class="marquee" aria-hidden="true">
+      <div class="marquee-track">
+        <span>NO INSTALL // ANY OS // WEBHID // 8K POLLING // 32000 DPI // MACROS // </span>
+        <span>NO INSTALL // ANY OS // WEBHID // 8K POLLING // 32000 DPI // MACROS // </span>
+      </div>
+    </div>
+    <div class="notes">
+      <div><h3 class="eyebrow">01 · PLUG IN</h3><p>Connect the 8K receiver or the cable. Move the mouse once so it wakes up.</p></div>
+      <div><h3 class="eyebrow">02 · CONNECT</h3><p>Use Chrome, Edge, Brave, Opera or another Chromium browser and pick the receiver in the prompt.</p></div>
+      <div><h3 class="eyebrow">03 · LINUX</h3><p>Install <code>99-arye-hid.rules</code> into <code>/etc/udev/rules.d/</code> so your browser can open the device.</p></div>
+    </div>
+    <footer class="foot">Unofficial community tool. Not affiliated with or endorsed by ARYE or Compx. Product renders © their owners.</footer>
+  </section>
+
+  <!-- App ------------------------------------------------------------------ -->
+  <main id="app" hidden>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="main" aria-selected="true"><span>01</span>Main</button>
+      <button role="tab" data-tab="buttons"><span>02</span>Buttons</button>
+      <button role="tab" data-tab="performance"><span>03</span>Performance</button>
+      <button role="tab" data-tab="advanced"><span>04</span>Advanced</button>
+      <button role="tab" data-tab="device"><span>05</span>Device</button>
+    </nav>
+    <div class="demo-banner" id="demo-banner" hidden>DEMO MODE · NOT CONNECTED TO YOUR MOUSE · <a href="./">CONNECT THE REAL DEVICE →</a></div>
+    <div class="offline" id="offline" hidden>MOUSE IS ASLEEP OR OUT OF RANGE · MOVE IT TO WAKE IT UP</div>
+
+    <div class="workspace">
+      <aside class="stage" id="stage" aria-label="Mouse preview">
+        <div class="stage-view" id="stage-view"></div>
+        <div class="readout" id="readout"></div>
+      </aside>
+
+      <div class="controls">
+        <section class="panel" data-panel="main">
+          <article class="card">
+            <header class="card-head">
+              <h3>DPI Stages</h3>
+              <div class="stepper" id="stage-count"></div>
+            </header>
+            <div class="chips" id="stages"></div>
+            <div class="stage-editor" id="stage-editor"></div>
+            <p class="hint">The mouse briefly flashes a stage's colour when you switch to it with the DPI button.</p>
+          </article>
+          <article class="card">
+            <header class="card-head"><h3>Polling Rate</h3><span class="hint" id="rate-hint"></span></header>
+            <div class="seg seg-big" id="rates"></div>
+          </article>
+        </section>
+
+        <section class="panel" data-panel="buttons" hidden>
+          <article class="card editor" id="editor"></article>
+        </section>
+
+        <section class="panel" data-panel="performance" hidden>
+          <article class="card">
+            <header class="card-head"><h3>Lift-off Distance</h3></header>
+            <div class="seg seg-big" id="lod"></div>
+            <p class="hint">How high the mouse can be lifted before the sensor stops tracking.</p>
+          </article>
+          <article class="card">
+            <header class="card-head"><h3>Sensor</h3></header>
+            <div class="toggles">
+              <div class="toggle-row" data-toggle="motionSync"><span>Motion Sync<small>Aligns sensor frames with USB polling for smoother tracking</small></span></div>
+              <div class="toggle-row" data-toggle="angleSnap"><span>Angle Snapping<small>Straightens near-horizontal and near-vertical movement</small></span></div>
+              <div class="toggle-row" data-toggle="ripple"><span>Ripple Control<small>Smooths jitter at very high DPI</small></span></div>
+            </div>
+          </article>
+        </section>
+
+        <section class="panel" data-panel="advanced" hidden>
+          <article class="card">
+            <header class="card-head"><h3>Sensor Orientation</h3></header>
+            <label class="field"><span>Angle</span><input type="range" id="angle" min="-33" max="33" step="1"><output></output></label>
+            <div class="scale"><span>−33°</span><span>0°</span><span>+33°</span></div>
+            <p class="hint">Rotates the sensor axis to match how you hold the mouse. The preview turns as you drag.</p>
+          </article>
+          <article class="card">
+            <header class="card-head"><h3>Advanced Settings</h3></header>
+            <div class="toggles">
+              <div class="toggle-row" data-toggle="boost"><span>Boost Mode<small>20000 fps sensor scanning mode</small></span></div>
+            </div>
+            <div class="field-block">
+              <span class="label">Auto Sleep</span>
+              <div class="seg seg-wrap" id="sleep"></div>
+            </div>
+            <label class="field"><span>Debounce (ms)</span><input type="range" id="debounce" min="0" max="30" step="1"><output></output></label>
+            <p class="hint warn" id="debounce-warn" hidden>Short debounce times can cause accidental double clicks. Raise it if that happens.</p>
+          </article>
+        </section>
+
+        <section class="panel" data-panel="device" hidden>
+          <article class="card">
+            <header class="card-head"><h3>Device Information</h3></header>
+            <dl class="info" id="info"></dl>
+          </article>
+          <article class="card" id="receiver-card">
+            <header class="card-head"><h3>Receiver</h3></header>
+            <div class="field-block" style="margin-top:0">
+              <span class="label">Receiver LED shows</span>
+              <div class="radios" id="dongle-led"></div>
+            </div>
+            <div class="toggles">
+              <div class="toggle-row" data-toggle="longRange"><span>Long Distance Mode<small>More range and interference resistance, shorter battery life</small></span></div>
+            </div>
+            <div class="field-block">
+              <span class="label">Pairing</span>
+              <p class="hint">Hold left, right and middle buttons until the mouse flashes yellow, then start pairing.</p>
+              <button class="btn" id="pair">START PAIRING <span aria-hidden="true">→</span></button>
+            </div>
+          </article>
+          <article class="card">
+            <header class="card-head"><h3>Profile</h3></header>
+            <p class="hint" style="margin-top:0">Save every setting, button and macro to a file, or load one back.</p>
+            <div class="actions">
+              <button class="btn" id="export">EXPORT <span aria-hidden="true">↓</span></button>
+              <label class="btn">IMPORT <span aria-hidden="true">↑</span><input type="file" id="import" accept=".json,application/json" hidden></label>
+            </div>
+            <div class="field-block danger">
+              <span class="label">Factory Reset</span>
+              <p class="hint">Restores the mouse to its out-of-box settings.</p>
+              <button class="btn btn-danger" id="reset">RESTORE DEFAULTS</button>
+            </div>
+          </article>
+          <article class="card">
+            <header class="card-head"><h3>Firmware</h3></header>
+            <p class="hint" style="margin-top:0">Firmware updates aren't available here. A failed flash can brick the mouse, so update with the official Windows tool.</p>
+          </article>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <div class="busy" id="busy" hidden><div class="busy-box"><span id="busy-text">READING DEVICE</span><div class="bar"><i id="busy-bar"></i></div></div></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <dialog id="confirm"><form method="dialog"><p id="confirm-text"></p><menu><button value="cancel" class="btn">CANCEL</button><button value="ok" class="btn btn-primary">CONFIRM</button></menu></form></dialog>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+# Lets the logged-in user open ARYE / Compx (VID 3554) hidraw nodes from the browser (WebHID).
+# Install:  sudo cp 99-arye-hid.rules /etc/udev/rules.d/ && sudo udevadm control --reload && sudo udevadm trigger
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3554", MODE="0660", TAG+="uaccess"
