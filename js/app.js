@@ -55,6 +55,14 @@ async function save(fn, msg = 'SAVED') {
   } catch (e) {
     console.error(e);
     toast(e.message || 'Write failed', true);
+    // mouse.config only changes after a confirmed write, so this snaps controls back to the device state.
+    if (mouse) {
+      renderMain();
+      renderPerformance();
+      renderAdvanced();
+      renderDevice();
+      renderStage();
+    }
     return false;
   }
 }
@@ -156,6 +164,7 @@ async function start(m) {
 }
 
 async function stop() {
+  stopActiveRecording?.();
   clearInterval(pollTimer);
   pollTimer = null;
   try { await mouse?.close(); } catch {}
@@ -174,7 +183,7 @@ async function waitOnlineAndLoad() {
       $('#offline').hidden = false;
       await new Promise((r) => setTimeout(r, 1500));
     }
-    if (!mouse) return;
+    if (!mouse) return false;
     $('#offline').hidden = true;
     busy('READING DEVICE', 0);
     await mouse.load((p) => busy('READING DEVICE', p));
@@ -187,9 +196,11 @@ async function waitOnlineAndLoad() {
     renderAll();
     clearInterval(pollTimer);
     pollTimer = setInterval(poll, 2000);
+    return true;
   } catch (e) {
     console.error(e);
     toast(`Could not read the device: ${e.message}`, true);
+    return false;
   } finally {
     busy(null);
   }
@@ -467,7 +478,10 @@ async function applyFunction(fn) {
   }
 }
 
+let stopActiveRecording = null; // set while a macro is being recorded
+
 function renderEditor() {
+  stopActiveRecording?.();
   const ed = $('#editor');
   ed.hidden = false;
   const current = mouse.buttonFunction(selected);
@@ -593,6 +607,7 @@ function macroEditor(current) {
   recArea.addEventListener('contextmenu', (e) => recording && e.preventDefault());
   const recBtn = el('button', { type: 'button', class: 'btn btn-sm' }, 'RECORD');
   const stopRec = () => {
+    stopActiveRecording = null;
     recording = false;
     window.removeEventListener('keydown', onKey, true);
     window.removeEventListener('keyup', onKey, true);
@@ -602,6 +617,7 @@ function macroEditor(current) {
   recBtn.onclick = () => {
     if (recording) return stopRec();
     recording = true;
+    stopActiveRecording = stopRec;
     last = performance.now();
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('keyup', onKey, true);
@@ -670,9 +686,13 @@ function macroEditor(current) {
   importInput.onchange = async () => {
     try {
       const x = JSON.parse(await importInput.files[0].text());
-      if (!Array.isArray(x.events)) throw new Error('Not a macro file');
+      const types = new Set(Object.values(EV));
+      const valid = (e) => e && types.has(e.t) && Number.isInteger(e.v) && e.v >= 0 && e.v <= 0xffff && typeof e.down === 'boolean';
+      if (!Array.isArray(x.events) || x.events.length < 2 || !x.events.every(valid)) throw new Error('Not a valid macro file');
       m.name = name.value = String(x.name ?? 'Imported').slice(0, 30);
-      m.events = x.events.slice(0, MACRO_MAX_EVENTS);
+      m.events = x.events.slice(0, MACRO_MAX_EVENTS).map((e) => ({
+        t: e.t, v: e.v, down: e.down, delay: Math.max(0, Math.min(65535, Math.round(Number(e.delay)) || 0)),
+      }));
       paint();
     } catch (e) { toast(e.message, true); }
   };
@@ -776,16 +796,22 @@ function initDeviceActions() {
     try {
       await mouse.pair();
       busy('PAIRING · KEEP THE MOUSE CLOSE', null);
+      // A receiver that is already linked reports online immediately, so require the link to drop
+      // and come back before calling it paired.
+      let sawOffline = false;
       for (let i = 0; i < 40; i++) {
         await new Promise((r) => setTimeout(r, 500));
-        if (await mouse.online()) {
+        const on = await mouse.online();
+        if (!on) sawOffline = true;
+        else if (sawOffline) {
           busy(null);
-          toast('PAIRED');
-          await waitOnlineAndLoad();
+          if (await waitOnlineAndLoad()) toast('PAIRED');
           return;
         }
       }
-      toast('Pairing timed out. Put the mouse in pairing mode and try again.', true);
+      toast(sawOffline
+        ? 'Pairing timed out. Put the mouse in pairing mode and try again.'
+        : 'The mouse stayed connected the whole time, so it is probably already paired with this receiver.', true);
     } catch (e) {
       toast(e.message, true);
     } finally {
@@ -816,8 +842,7 @@ function initDeviceActions() {
     busy('RESETTING', null);
     try {
       await mouse.factoryReset();
-      await waitOnlineAndLoad();
-      toast('DEFAULTS RESTORED');
+      if (await waitOnlineAndLoad()) toast('DEFAULTS RESTORED');
     } catch (e) { toast(e.message, true); } finally { busy(null); }
   };
 }
@@ -828,6 +853,7 @@ function initTabs() {
       for (const o of $$('.tabs button')) o.setAttribute('aria-selected', String(o === t));
       for (const p of $$('.panel')) p.hidden = p.dataset.panel !== t.dataset.tab;
       currentTab = t.dataset.tab;
+      stopActiveRecording?.();
       renderStage();
     };
   }

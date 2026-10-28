@@ -2,7 +2,7 @@
 // through Linux hidraw instead of WebHID, verifies every write by re-reading flash, then restores
 // every touched byte.  Usage:  node tests/hardware-test.mjs [/dev/hidrawN]
 import fs from 'node:fs';
-import { Mouse } from '../js/device.js';
+import { Mouse, matches } from '../js/device.js';
 import {
   ADDR, CONFIG_SIZE, SHORTCUT_SIZE, MACRO_SIZE, REPORT_ID, CMD, EV, check, encodeDpi, encodeShortcut,
   encodeMacro, mediaEvents, comboEvents, decodeMacro, describeFunction,
@@ -42,7 +42,7 @@ class HidrawTransport {
         const d = new Uint8Array(buf.subarray(1, 17));
         if (process.env.HWLOG) fs.appendFileSync(process.env.HWLOG, `< ${Buffer.from(d).toString('hex')}\n`);
         if (check([REPORT_ID, ...d.slice(0, 15)]) === d[15]) {
-          if (this.pending && d[0] === this.pending.cmd) {
+          if (this.pending && matches(this.pending.packet, d)) {
             const p = this.pending;
             this.pending = null;
             clearTimeout(p.timer);
@@ -55,7 +55,9 @@ class HidrawTransport {
   }
   send(packet16, cmd, timeout) {
     return new Promise((resolve, reject) => {
-      this.pending = { cmd, resolve, timer: setTimeout(() => { this.pending = null; reject(new Error('timeout')); }, timeout) };
+      const entry = { packet: packet16, resolve };
+      entry.timer = setTimeout(() => { if (this.pending === entry) this.pending = null; reject(new Error('timeout')); }, timeout);
+      this.pending = entry;
       if (process.env.HWLOG) fs.appendFileSync(process.env.HWLOG, `> ${Buffer.from(packet16).toString('hex')}\n`);
       fs.writeSync(this.fd, Buffer.from([REPORT_ID, ...packet16]));
     });

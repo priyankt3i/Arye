@@ -10,6 +10,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export const webHidSupported = () => 'hid' in navigator;
 
+// A reply belongs to a request when the command matches and, for flash access, the address too.
+// Matching on the command alone lets a late reply to a timed-out read satisfy the next read.
+export function matches(request, reply) {
+  if (reply[0] !== request[0]) return false;
+  if (request[0] === CMD.READ_FLASH || request[0] === CMD.WRITE_FLASH) return reply[2] === request[2] && reply[3] === request[3];
+  return true;
+}
+
 class HidTransport {
   constructor(hid) {
     this.hid = hid;
@@ -28,7 +36,7 @@ class HidTransport {
     if (e.reportId !== REPORT_ID) return;
     const d = new Uint8Array(e.data.buffer, e.data.byteOffset, e.data.byteLength);
     if (d.length < 16 || check([REPORT_ID, ...d.slice(0, 15)]) !== d[15]) return;
-    if (this.pending && d[0] === this.pending.cmd) {
+    if (this.pending && matches(this.pending.packet, d)) {
       const p = this.pending;
       this.pending = null;
       clearTimeout(p.timer);
@@ -39,10 +47,23 @@ class HidTransport {
   }
 
   async send(packet16, cmd, timeout) {
+    let entry;
     const reply = new Promise((resolve, reject) => {
-      this.pending = { cmd, resolve, timer: setTimeout(() => { this.pending = null; reject(new Error('timeout')); }, timeout) };
+      entry = { packet: packet16, resolve, reject };
+      entry.timer = setTimeout(() => {
+        if (this.pending === entry) this.pending = null;
+        reject(new Error('timeout'));
+      }, timeout);
     });
-    await this.hid.sendReport(REPORT_ID, new Uint8Array(packet16));
+    this.pending = entry;
+    try {
+      await this.hid.sendReport(REPORT_ID, new Uint8Array(packet16));
+    } catch (e) {
+      clearTimeout(entry.timer);
+      if (this.pending === entry) this.pending = null;
+      reply.catch(() => {});
+      throw e;
+    }
     return reply;
   }
 }
@@ -79,6 +100,12 @@ class DemoTransport {
     r[15] = check([REPORT_ID, ...r.slice(0, 15)]);
     return r;
   }
+}
+
+// Macro buttons store their record in slot p1 of the key map (the app writes p1 = button index).
+function macroSlot(config, b) {
+  const o = ADDR.keys + 4 * b;
+  return config[o] === KEY_TYPE.MACRO && config[o + 1] < 16 ? config[o + 1] : b;
 }
 
 export class Mouse {
@@ -205,9 +232,10 @@ export class Mouse {
       const [type] = this.keyMap(b);
       this.shortcuts[b] = type === KEY_TYPE.SHORTCUT ? await this.readFlash(ADDR.shortcut + b * SHORTCUT_SIZE, SHORTCUT_SIZE) : null;
       if (type === KEY_TYPE.MACRO) {
-        const head = await this.readFlash(ADDR.macro + b * MACRO_SIZE, 0x20);
+        const slot = macroSlot(this.config, b);
+        const head = await this.readFlash(ADDR.macro + slot * MACRO_SIZE, 0x20);
         const n = Math.min(70, head[0x1f]);
-        const rest = n >= 2 ? await this.readFlash(ADDR.macro + b * MACRO_SIZE + 0x20, 5 * n + 1) : [];
+        const rest = n >= 2 ? await this.readFlash(ADDR.macro + slot * MACRO_SIZE + 0x20, 5 * n + 1) : [];
         this.macros[b] = [...head, ...rest];
       } else {
         this.macros[b] = null;
@@ -300,15 +328,21 @@ export class Mouse {
     const macros = [];
     for (let b = 0; b < BUTTON_COUNT; b++) {
       shortcuts.push(await this.readFlash(ADDR.shortcut + b * SHORTCUT_SIZE, SHORTCUT_SIZE));
-      const head = await this.readFlash(ADDR.macro + b * MACRO_SIZE, 0x20);
+      const slot = macroSlot(this.config, b);
+      const head = await this.readFlash(ADDR.macro + slot * MACRO_SIZE, 0x20);
       const n = head[0x1f] >= 2 && head[0x1f] <= 70 ? head[0x1f] : 0;
-      macros.push(n ? [...head, ...(await this.readFlash(ADDR.macro + b * MACRO_SIZE + 0x20, 5 * n + 1))] : null);
+      macros.push(n ? [...head, ...(await this.readFlash(ADDR.macro + slot * MACRO_SIZE + 0x20, 5 * n + 1))] : null);
     }
     return { format: 'arye-web-profile', version: 1, config: [...this.config], shortcuts, macros };
   }
 
   async importProfile(p, progress = () => {}) {
-    if (p?.format !== 'arye-web-profile' || p.config?.length !== CONFIG_SIZE) throw new Error('Not an ARYE profile file');
+    const bytes = (a, max) => Array.isArray(a) && a.length <= max && a.every((x) => Number.isInteger(x) && x >= 0 && x <= 255);
+    if (p?.format !== 'arye-web-profile' || p.config?.length !== CONFIG_SIZE || !bytes(p.config, CONFIG_SIZE)) throw new Error('Not an ARYE profile file');
+    for (let b = 0; b < BUTTON_COUNT; b++) {
+      if (p.shortcuts?.[b] != null && !bytes(p.shortcuts[b], SHORTCUT_SIZE)) throw new Error(`Profile has a damaged shortcut for button ${b + 1}`);
+      if (p.macros?.[b] != null && !bytes(p.macros[b], MACRO_SIZE)) throw new Error(`Profile has a damaged macro for button ${b + 1}`);
+    }
     // Write only the byte runs that differ (runs separated by < 4 equal bytes are merged).
     const runs = [];
     for (let a = 0; a < CONFIG_SIZE; a++) {
@@ -323,7 +357,7 @@ export class Mouse {
     }
     for (let b = 0; b < BUTTON_COUNT; b++) {
       if (p.shortcuts?.[b]) await this.writeFlash(ADDR.shortcut + b * SHORTCUT_SIZE, p.shortcuts[b]);
-      if (p.macros?.[b]) await this.writeFlash(ADDR.macro + b * MACRO_SIZE, p.macros[b]);
+      if (p.macros?.[b]) await this.writeFlash(ADDR.macro + macroSlot(p.config, b) * MACRO_SIZE, p.macros[b]);
       progress(0.5 + (0.5 * (b + 1)) / BUTTON_COUNT);
     }
     await this.load();
